@@ -35,6 +35,7 @@ struct Specification
     test_seconds::Float64
 
     feature::Dict{String,Int64}
+    noise_estimate::Dict{String, Float64}
     noise_groups::Array{Dict{String,Any},1}
 
 
@@ -50,7 +51,7 @@ struct Specification
             s["sample_rate"],s["speech_level_db"],s["snr"],
             s["speech_noise_time_ratio"],s["train_test_split_ratio"],
             s["train_seconds"],s["test_seconds"],
-            s["feature"],s["noise_groups"]
+            s["feature"],s["noise_estimate"],s["noise_groups"]
             )
     end
 end
@@ -99,11 +100,17 @@ function generate_specification(path_mix::String, path_speech::String, path_nois
         "test_seconds" => 1000,
         "random_seed" => 42,
         "feature" => Dict(
-            "frame_length"=>512, 
-            "hop_length"=>128,
+            "frame_length"=>1024, 
+            "hop_length"=>256,
             "mel_bands" =>136, 
             "context_frames"=>31, 
-            "nat_frames"=>15),
+            "nat_frames"=>31),
+        "noise_estimate" => Dict(
+            "tau_be"=>100e-3, 
+            "c_inc_db"=>5.0,
+            "c_dec_db"=>30.0,
+            "noise_init_db"=> -40.0,
+            "min_noise_db"=> -100.0),
         "noise_groups" => x
         )
 
@@ -509,8 +516,22 @@ function feature(s::Specification, decomp_info; flag="train")
 
         ratiomask_mel_oracle = (mel.filter * ratiomask_dft_oracle) .* mel.weight
         magnitude_dft = abs.(𝕏m)
-        #@ magnitude_mel = log.((mel.filter * magnitude_dft) .* mel.weight +eps())
-        magnitude_mel = log.(mel.filter * magnitude_dft + eps())
+        
+        magnitude_mel = log.((mel.filter * magnitude_dft) .* mel.weight +eps())
+        #@ magnitude_mel = log.(mel.filter * magnitude_dft + eps())
+
+        # noise estimate channel
+        bandnoise = Fast.noise_estimate_invoke_deprecated(
+            Fast.Frame1{Int64}(s.sample_rate, s.feature["frame_length"], s.feature["hop_length"], 0), 
+            s.noise_estimate["tau_be"], 
+            s.noise_estimate["c_inc_db"], 
+            s.noise_estimate["c_dec_db"], 
+            s.noise_estimate["noise_init_db"], 
+            s.noise_estimate["min_noise_db"], 
+            hcat(𝕏m, 𝕏m)
+        )
+        bandnoise = view(bandnoise,:,size(𝕏m,2)+1:2size(𝕏m,2))
+        bandnoise_mel = log.((mel.filter * bandnoise) .* mel.weight + eps())
 
         MAT.matwrite(
             joinpath(spectrum_dir, basename(i[1:end-4]*".mat")), 
@@ -518,7 +539,9 @@ function feature(s::Specification, decomp_info; flag="train")
                 # "ratiomask_dft"=>ratiomask_dft_oracle,
                 # "spectrum_dft"=>magnitude_dft,
                 "ratiomask_mel"=>ratiomask_mel_oracle,
-                "spectrum_mel"=>magnitude_mel)
+                "spectrum_mel"=>magnitude_mel,
+                "bandnoise_mel" => bandnoise_mel
+                )
         )
 
 
@@ -587,7 +610,7 @@ function statistics(s::Specification; flag = "train")
             ratiomask_size = size(u["ratiomask_mel"],1)
         end
     end
-    open(joinpath(s.mix,"history.log"),"a") do fid
+    open(joinpath(s.root_mix,"history.log"),"a") do fid
         write(fid, "[5] $(flag) spectrum size = [$(spectrum_size),$(spectrum_frames)]\n")
         write(fid, "[5] $(flag) ratiomask size = [$(ratiomask_size),$(ratiomask_frames)]\n")
     end
@@ -616,7 +639,7 @@ function statistics(s::Specification; flag = "train")
 
     average!("spectrum_mel", spectrum_frames, μ_spectrum)
     average!("ratiomask_mel", ratiomask_frames, μ_ratiomask)
-    open(joinpath(s.mix,"history.log"),"a") do fid
+    open(joinpath(s.root_mix,"history.log"),"a") do fid
         write(fid, "[5] $(flag) global spectrum μ (dimentionless) = $(mean(μ_spectrum))\n")
         write(fid, "[5] $(flag) global ratiomask μ (dimentionless) = $(mean(μ_ratiomask))\n")
     end
@@ -631,7 +654,7 @@ function statistics(s::Specification; flag = "train")
     for k = 1:spectrum_size
         σ_spectrum[k] = sqrt(sum_kbn(view(temp,k,:))/(spectrum_frames-1))
     end
-    open(joinpath(s.mix,"history.log"),"a") do fid
+    open(joinpath(s.root_mix,"history.log"),"a") do fid
         write(fid, "[5] $(flag) global spectrum σ (dimentionless) = $(mean(σ_spectrum))\n")
     end
 
@@ -644,7 +667,7 @@ function statistics(s::Specification; flag = "train")
     path_stat = joinpath(s.root_mix, flag, "statistics.mat")
     rm(path_stat, force=true)
     MAT.matwrite(path_stat, statistics)
-    open(joinpath(s.mix,"history.log"),"a") do fid
+    open(joinpath(s.root_mix,"history.log"),"a") do fid
         write(fid, "[5] $(flag) global statistics written to $(path_stat)\n")
     end
     return statistics
@@ -665,10 +688,9 @@ function tensor(s::Specification; flag="train")
     for i in FileSystem.list(joinpath(s.root_mix, flag, "spectrum"), t=".mat")
 
         data = MAT.matread(i)
-        variable = Float32.(Fast.sliding_aperture(
-            data["spectrum_mel"], 
-            div(s.feature["context_frames"]-1,2), 
-            s.feature["nat_frames"]))
+        mixture = Float32.(Fast.sliding_aperture(data["spectrum_mel"], div(s.feature["context_frames"]-1,2), s.feature["nat_frames"]))
+        noisech = Float32.(data["bandnoise_mel"])
+        variable = vcat(mixture, noisech)
         label = Float32.(data["ratiomask_mel"])
 
         index = split(basename(i),"+")
@@ -697,9 +719,21 @@ end
 
 function ratiomask_inference(s::Specification, nn::Neural.Net{T}, mel::Fast.Mel{T}, 𝕏::Array{Complex{T},2}) where T <: AbstractFloat
 
-    mag_mel = log.(mel.filter * abs.(𝕏) + eps(T))
+    bandnoise = Fast.noise_estimate_invoke_deprecated(
+        Fast.Frame1{Int64}(s.sample_rate, s.feature["frame_length"], s.feature["hop_length"], 0), 
+        s.noise_estimate["tau_be"], 
+        s.noise_estimate["c_inc_db"], 
+        s.noise_estimate["c_dec_db"], 
+        s.noise_estimate["noise_init_db"], 
+        s.noise_estimate["min_noise_db"], 
+        hcat(𝕏, 𝕏)
+    )
+    bandnoise = view(bandnoise,:,size(𝕏,2)+1:2size(𝕏,2))
+    bandnoise_mel = log.((mel.filter * bandnoise) .* mel.weight + eps(T))
+
+    mag_mel = log.((mel.filter * abs.(𝕏)) .* mel.weight + eps(T))
     mag_tensor = Fast.sliding_aperture(mag_mel, div(s.feature["context_frames"]-1,2), s.feature["nat_frames"])
-    ratiomask_mel = Neural.feedforward(nn, mag_tensor)
+    ratiomask_mel = Neural.feedforward(nn, vcat(mag_tensor,bandnoise_mel))
     ratiomask = mel.filter_t * ratiomask_mel
 end
 
@@ -724,7 +758,7 @@ function process_dataset(specification_file::String, model_file::String, wav_dir
 
     s = Specification(specification_file)
     nn = Neural.Net{Float32}(model_file)
-    mel = Fast.Mel{Float64}(s.sample_rate, s.feature["frame_length"], s.feature["mel_bands"])
+    mel = Fast.Mel{Float32}(s.sample_rate, s.feature["frame_length"], s.feature["mel_bands"])
 
     dir_out = joinpath(wav_dir, "processed")
     rm(dir_out, force=true, recursive=true)
@@ -742,7 +776,7 @@ end
 
 
 
-function sdr_benchmark(reference_dir::String, evaluation_dir::String)
+function sdr_benchmark(reference_dir::String, evaluation_dir::String; verbose=false)
     # file names must be identical in both folders
     # evaluation dir may contain a subset of the reference
     sdr = zeros(1,1)
@@ -751,8 +785,8 @@ function sdr_benchmark(reference_dir::String, evaluation_dir::String)
     for i in items
         t,sr = WAV.wavread(joinpath(reference_dir, basename(i)))
         x,sr = WAV.wavread(i)
-        println(i)
         sdr += Fast.signal_to_distortion_ratio(view(x,:,1), view(t,:,1))
+        verbose && info(i)
     end
     return sdr/length(items)
 end

@@ -441,8 +441,10 @@ end
 
 
 
-sigmoid(x::T) where T <: AbstractFloat = one(T) / (one(T) + exp(-x))
-sigmoidinv(x::T) where T <: AbstractFloat = log(x / (one(T)-x))  # x ∈ (0, 1)
+sigmoid(x::T) where T <: AbstractFloat = one(T)/(one(T)+exp(-x))
+sigmoidinv(x::T) where T <: AbstractFloat = log(x/(one(T)-x))  # x ∈ (0, 1)
+tanh_1(x::T) where T <: AbstractFloat = 2sigmoid(x)-one(T)
+tanh_2(x::T) where T <: AbstractFloat = (one(T)-exp(-x))/(one(T)+exp(-x))
 rms(x,dim) = sqrt.(sum((x.-mean(x,dim)).^2,dim)/size(x,dim))
 rms(x) = sqrt(sum((x-mean(x)).^2)/length(x))
 
@@ -627,6 +629,47 @@ function signal_to_distortion_ratio(x::AbstractArray{T,1}, t::AbstractArray{T,1}
     10log10.(sum(t.^2, 1) ./ sum((t-y).^2, 1))
 end
 
+
+
+
+function noise_estimate_invoke_deprecated(
+    p::Frame1{U}, 
+    tau_be, 
+    c_inc_db, 
+    c_dec_db, 
+    noise_init_db, 
+    min_noise_db, 
+    𝕏::AbstractArray{Complex{T},2}) where {T <: AbstractFloat, U <: Integer}
+
+    # p = Frame1{Int64}(16000, 1024, 256, 0)
+    # tau_be = 100e-3 sec
+    # c_inc_db = 1,4,[5],10,30 dB
+    # c_dec_db = 6,24,[30],60 dB
+    # noise_init_db = -20, -30, [-40] dB
+    # min_noise_db = -50, -60, [-100] dB
+
+    fs = p.samplerate
+    h = p.update
+    m = div(p.block,2)+1
+    n = size(𝕏,2)
+
+    alpha_be = T(exp((-5h)/(tau_be*fs))) 
+    c_inc = T(10.0^(h*(c_inc_db/20)/fs))
+    c_dec = T(10.0^-(h*(c_dec_db/20)/fs))
+    band_energy = zeros(T,m,n+1)
+    band_noise = T(10.0^(noise_init_db/20))*ones(T,m,n+1)
+    min_noise = T(10.0^(min_noise_db/20))
+
+    for i = 1:n
+        band_energy[:,i+1] = alpha_be * view(band_energy,:,i) + (one(T)-alpha_be) * abs.(view(𝕏,:,i))
+        for k = 1:m
+            band_energy[k,i+1] > band_noise[k,i] && (band_noise[k,i+1] = c_inc * band_noise[k,i])
+            band_energy[k,i+1] <= band_noise[k,i] && (band_noise[k,i+1] = c_dec * band_noise[k,i])
+            band_energy[k,i+1] < min_noise && (band_energy[k,i+1] = min_noise)
+        end
+    end
+    band_noise = band_noise[:,2:end]
+end
 
 
 ## module ##

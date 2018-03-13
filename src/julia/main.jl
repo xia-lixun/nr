@@ -12,8 +12,9 @@ function build(path_specification)
 
     # 0
     s = Mix.Specification(path_specification)
-    open(joinpath(s.mix,"history.log"),"a") do fid
+    open(joinpath(s.root_mix,"history.log"),"a") do fid
         write(fid, "[0] [$(path_specification)]\n")
+        write(fid, "[0] [$(now())]\n")
     end
     srand(s.seed)
     !isdir(s.root_noise) && error("noise depot doesn't exist")
@@ -58,7 +59,7 @@ function build(path_specification)
     # 6
     sdr_oracle_dft = Mix.sdr_benchmark(joinpath(s.root_mix, "test", "decomposition"), joinpath(s.root_mix, "test", "oracle", "dft"))
     sdr_oracle_mel = Mix.sdr_benchmark(joinpath(s.root_mix, "test", "decomposition"), joinpath(s.root_mix, "test", "oracle", "mel"))
-    open(joinpath(s.mix,"history.log"),"a") do fid
+    open(joinpath(s.root_mix,"history.log"),"a") do fid
         write(fid, "[6] Oracle SDR DFT($(s.feature["frame_length"])) = $(sdr_oracle_dft) dB\n")
         write(fid, "[6] Oracle SDR Mel($(s.feature["mel_bands"])) = $(sdr_oracle_mel) dB\n")
     end
@@ -68,7 +69,7 @@ function build(path_specification)
     # 7
     Mix.tensor(s)
     Mix.tensor(s, flag="test")
-    open(joinpath(s.mix,"history.log"),"a") do fid
+    open(joinpath(s.root_mix,"history.log"),"a") do fid
         write(fid, "[7] tensors created\n")
     end
     info("tensors created")
