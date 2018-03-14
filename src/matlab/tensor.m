@@ -12,8 +12,8 @@ function tensor(s, flag)
 
     % convert spectrum to tensor
     for i = 1:length(dataset)
-        load(fullfile(path_spectrum, dataset(i).name), 'ratiomask_mel', 'magnitude_mel');
-        variable = single(sliding(magnitude_mel, (s.feature.context_span-1)/2, s.feature.nat_frames));
+        load(fullfile(path_spectrum, dataset(i).name), 'ratiomask_mel', 'magnitude_mel', 'bandnoise_mel');
+        variable = [single(sliding(magnitude_mel, (s.feature.context_span-1)/2, s.feature.nat_frames)); single(bandnoise_mel)];
         label = single(ratiomask_mel);
         
         temp = split(dataset(i).name, '+');

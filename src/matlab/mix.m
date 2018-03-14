@@ -1,6 +1,7 @@
 % data mixing scripts for dnn speech enhancement
 % lixun.xia2@harman.com
-% 2018-01-16
+% v1.1 2018-01-16
+% v1.2 2018-03-14
 function [sdr_oracle_dft, sdr_oracle_mel] = mix()
 
     s = specification();
@@ -11,14 +12,11 @@ function [sdr_oracle_dft, sdr_oracle_mel] = mix()
     
     save2json(train_label, fullfile(s.root, 'training', 'info.json'));
     save2json(train_log, fullfile(s.root, 'training', 'log.json'));
-    
     save2json(test_label, fullfile(s.root, 'testing', 'info.json'));
     save2json(test_log, fullfile(s.root, 'testing', 'log.json'));
     
-    
     train_frames = generate_feature(s, train_label, 'training');
     test_frames = generate_feature(s, test_label, 'testing');
-    
     
     [mu_bm_train, mu_spec_train, std_bm_train, std_spec_train] = statistics(s, train_frames, 'training');
     [mu_bm_test, mu_spec_test, std_bm_test, std_spec_test] = statistics(s, test_frames, 'testing');

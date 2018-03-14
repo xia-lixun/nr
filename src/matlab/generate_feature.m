@@ -59,7 +59,7 @@ function n_frames = generate_feature(s, label, flag)
         [t_dir, t_base, t_ext] = fileparts(label(i).path);
         audiowrite(fullfile(path_decomposition, [t_base t_ext]), [speech_component noise_component], s.sample_rate, 'BitsPerSample', 32);
         
-        % calculate ideal-ratio masks
+        % calculate ratio masks
         nfft = s.feature.frame_length;
         hop = s.feature.hop_length;
         win = sqrt(hann(nfft,'periodic'));
@@ -68,14 +68,22 @@ function n_frames = generate_feature(s, label, flag)
         h_speech = stft2(speech_component.', nfft, hop, 0, win);
         h_noise = stft2(noise_component.', nfft, hop, 0, win);
         
-        ratiomask_dft = abs(h_speech)./(abs(h_speech)+abs(h_noise));
-        ratiomask_mel = (mel * ratiomask_dft) ./ mel_weight;
+        ratiomask_dft = abs(h_speech)./(abs(h_speech)+abs(h_noise));    %@ ideal ratio mask
+        %@ ratiomask_dft = real(h_speech./(h_speech+h_noise));          %@ phase sensitive mask
+        %@ ratiomask_dft = zeros(size(h_speech));                       %@ binary mask
+        %@ ratiomask_dft(abs(h_speech)>abs(h_noise)) = 1;
         
+        ratiomask_mel = (mel * ratiomask_dft) ./ mel_weight;
         magnitude_dft = abs(h_mix);
-        magnitude_mel = log(mel * magnitude_dft + eps);
+        magnitude_mel = log((mel * magnitude_dft) ./ mel_weight + eps);
+        
+        % noise estimate channel
+        bandnoise = noise_estimate_invoke_deprecate(s, [h_mix h_mix]);
+        bandnoise = bandnoise(:,size(h_mix,2)+1:2*size(h_mix,2));
+        bandnoise_mel = log((mel * bandnoise) ./ mel_weight + eps);
         
         % save spectrum for dnn training/validation
-        save(fullfile(path_spectrum,[t_base '.mat']), 'ratiomask_mel', 'magnitude_mel');
+        save(fullfile(path_spectrum,[t_base '.mat']), 'ratiomask_mel', 'magnitude_mel', 'bandnoise_mel');
         
         
         % reconstruct based on ideal-ratio mask for top performance
@@ -94,6 +102,7 @@ function n_frames = generate_feature(s, label, flag)
         audiowrite(fullfile(path_dft_ideal,[t_base t_ext]), speech_recovered_dft, s.sample_rate, 'BitsPerSample', 32);
         audiowrite(fullfile(path_mel_ideal,[t_base t_ext]), speech_recovered_mel, s.sample_rate, 'BitsPerSample', 32);
         
+        % 
         n_frames = n_frames + size(magnitude_mel,2);
     end
 end

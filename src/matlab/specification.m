@@ -17,11 +17,17 @@ specification.testing_seconds = 2000;
 specification.sample_rate = 16000;
 specification.random_seed = 42;
 
-specification.feature.frame_length = 512;
-specification.feature.hop_length = 128;
-specification.feature.context_span = 23;
-specification.feature.nat_frames = 14;
+specification.feature.frame_length = 1024;
+specification.feature.hop_length = 256;
+specification.feature.context_span = 31;
+specification.feature.nat_frames = 31;
 specification.feature.mel_filter_banks = 136;
+
+specification.noise_estimate.tau_be = 100e-3;
+specification.noise_estimate.c_inc_db = 5.0;  %30;%1;%10;%4;%
+specification.noise_estimate.c_dec_db = 30.0; %60;%6;24;%
+specification.noise_estimate.noise_init_db = -40.0; %-30;%-20;%
+specification.noise_estimate.min_noise_db = -100.0; %-60;%-50;%
 
 
 %------------------------noise database----------------------------
