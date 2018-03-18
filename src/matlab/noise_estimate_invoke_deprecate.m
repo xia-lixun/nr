@@ -3,7 +3,7 @@ function y = noise_estimate_invoke_deprecate(s, x)
 % s: specificatoin
 % x: spectrum frames in complex
 
-
+fs = s.sample_rate;
 nfft = s.feature.frame_length;
 hop = s.feature.hop_length;
 nframes = size(x,2);

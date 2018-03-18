@@ -3,7 +3,7 @@
 % 2018-01-16
 function s = specification()
 
-specification.root = 'D:\2-Workspace\';
+specification.root = 'D:\7-Workspace\';
 specification.noise = 'D:\oak\noise_google_audio_set\no_speech\';
 specification.speech = 'D:\oak\speech_timit_lp7_matlab\';
 
@@ -12,8 +12,8 @@ specification.split_ratio_for_training = 0.7;   % this is also time ratio
 specification.speech_level_db = [-22.0 -32.0 -42.0];
 specification.snr = [20.0 15.0 10.0 5.0 0.0 -5.0];
 
-specification.training_seconds = 4000;
-specification.testing_seconds = 2000;
+specification.training_seconds = 14400;
+specification.testing_seconds = 7200;
 specification.sample_rate = 16000;
 specification.random_seed = 42;
 

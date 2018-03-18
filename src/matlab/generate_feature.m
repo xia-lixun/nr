@@ -68,10 +68,10 @@ function n_frames = generate_feature(s, label, flag)
         h_speech = stft2(speech_component.', nfft, hop, 0, win);
         h_noise = stft2(noise_component.', nfft, hop, 0, win);
         
-        ratiomask_dft = abs(h_speech)./(abs(h_speech)+abs(h_noise));    %@ ideal ratio mask
+        %@ ratiomask_dft = abs(h_speech)./(abs(h_speech)+abs(h_noise)); %@ ideal ratio mask
         %@ ratiomask_dft = real(h_speech./(h_speech+h_noise));          %@ phase sensitive mask
-        %@ ratiomask_dft = zeros(size(h_speech));                       %@ binary mask
-        %@ ratiomask_dft(abs(h_speech)>abs(h_noise)) = 1;
+        ratiomask_dft = zeros(size(h_speech));                       %@ binary mask
+        ratiomask_dft(abs(h_speech)>abs(h_noise)) = 1;
         
         ratiomask_mel = (mel * ratiomask_dft) ./ mel_weight;
         magnitude_dft = abs(h_mix);
