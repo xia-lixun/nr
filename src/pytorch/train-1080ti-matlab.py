@@ -58,16 +58,21 @@ print(torch.__version__)
 path_train = '/home/coc/Public/train/tensor/'
 path_test = '/home/coc/Public/test/tensor/'
 path_model = '/home/coc/Public/model-pytorch.mat'
-path_weight = '/home/coc/Public/spweight.mat'
+path_weight = '/home/coc/Public/spweight-mel136.mat'
 path_logger = '/home/coc/Public/loss.log'
 
 
-def loadmat_transpose(path):
-    # temp = {}
-    # f = h5py.File(path)
-    # for k,v in f.items():
-    #     temp[k] = np.array(v)
-    temp = scio.loadmat(os.path.join(path, 't_' + str(p) + '.mat'))
+
+
+def loadmat_transpose_v73(path):
+    temp = {}
+    f = h5py.File(path)
+    for k,v in f.items():
+        temp[k] = np.array(v)
+    return temp
+
+def loadmat_transpose_v6(path):
+    temp = scio.loadmat(path)
     temp['variable'] = np.transpose(temp['variable'])
     temp['label'] = np.transpose(temp['label'])
     return temp
@@ -84,7 +89,7 @@ def indexing_dimension(path):
     dim.append((0,0,0,0))
 
     for i in range(1, 1+len([x for x in os.listdir(path)])):
-        temp = loadmat_transpose(os.path.join(path, 't_' + str(i) + '.mat'))
+        temp = loadmat_transpose_v6(os.path.join(path, 't_' + str(i) + '.mat'))
         var_samples = temp['variable'].shape[0]
         var_width = temp['variable'].shape[1]
         lab_samples = temp['label'].shape[0]
@@ -115,7 +120,7 @@ test_batch_partitions = int((test_bytes/test_partitions) // (gpu_mem_available *
 print('[init]: test, %d GPU partitions for each CPU partition'%(test_batch_partitions))
 
 
-tensor = loadmat_transpose(os.path.join(path_train, 't_1.mat'))
+tensor = loadmat_transpose_v6(os.path.join(path_train, 't_1.mat'))
 input_dim = tensor['variable'].shape[1]
 output_dim = tensor['label'].shape[1]
 del tensor
@@ -186,7 +191,7 @@ for i in params:
 
 
 optimizer = optim.SGD(model.parameters(), lr=learn_rate_init, momentum=momentum_coeff)
-spweight = loadmat_transpose(path_weight)
+spweight = loadmat_transpose_v73(path_weight)
 spweight = torch.from_numpy(spweight['ratio'][0] * 100).cuda()
 criterion = nn.MultiLabelSoftMarginLoss(weight=spweight).cuda()
 
@@ -221,7 +226,7 @@ def dataset_load2mem(path, index, select):
 
     for i in select:
         #temp = scio.loadmat(os.path.join(path, 't_' + str(i) + '.mat'))
-        temp = loadmat_transpose(os.path.join(path, 't_' + str(i) + '.mat'))
+        temp = loadmat_transpose_v6(os.path.join(path, 't_' + str(i) + '.mat'))
         stride = temp['variable'].shape[0]
         variable[offset:offset+stride] = temp['variable']
         label[offset:offset+stride] = temp['label']

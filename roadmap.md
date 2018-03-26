@@ -109,3 +109,7 @@
 3. add layers when test error stops shrinking. OK? validation loss even lower, but convergence fluctuated, need more data?
 4. reshape the weight init. OK
 5. try Adam with adaptive learning rate
+
+
+## 2018-03-26
+https://github.com/u39kun/deep-learning-benchmark

@@ -1,7 +1,8 @@
 % data mixing scripts for dnn speech enhancement
 % lixun.xia2@harman.com
 % v1.1 2018-01-16
-% v1.2 2018-03-14
+% v1.2 2018-03-14    batch normalization; pytorch;
+% v1.3 2018-03-26    noise estimate by cortana v1;
 function [sdr_oracle_dft, sdr_oracle_mel] = mix()
 
     s = specification();
